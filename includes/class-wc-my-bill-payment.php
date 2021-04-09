@@ -105,7 +105,7 @@ class Wc_My_Bill_Payment extends WC_Payment_Gateway {
 		add_action( 'woocommerce_api_wc_my_bill_payment', array( $this, 'my_bills_callback_response' ), 10, 0);
 
 	}
-	
+
 	/**
 	 * The name of the plugin used to uniquely identify it within the context of
 	 * WordPress and to define internationalization functionality.
@@ -371,7 +371,9 @@ class Wc_My_Bill_Payment extends WC_Payment_Gateway {
 
 			WC()->cart->empty_cart();
 			$thankyouURL = $order->get_checkout_order_received_url();
-			wp_safe_redirect($thankyouURL);
+			// wp_safe_redirect($thankyouURL);
+			wp_redirect($thankyouURL);
+			exit;
 
 			$returnResult['success'] = true;
 			$returnResult['successCode'] = "200";
@@ -382,6 +384,9 @@ class Wc_My_Bill_Payment extends WC_Payment_Gateway {
 			$this->write_Woo_logs('Return object');//Logs
 			$this->write_Woo_logs($_POST);//Logs
 			$this->write_Woo_logs($_REQUEST);//Logs
+			// wp_safe_redirect(wc_get_checkout_url());
+			wp_redirect(wc_get_checkout_url());
+			exit;
 		}
  
     }
