@@ -57,6 +57,11 @@ class Wc_My_Bill_Payment extends WC_Payment_Gateway {
 	 */
 	protected $version;
 
+	private $my_bill_apiKey;
+	private $logger;
+	private $log_enabled;
+	private $logger_context;
+
 	/**
 	 * Define the core functionality of the plugin.
 	 *
@@ -74,11 +79,6 @@ class Wc_My_Bill_Payment extends WC_Payment_Gateway {
 		}
 		$this->plugin_name = 'wc-my-bill-payment';
 
-		$this->load_dependencies();
-		$this->set_locale();
-		$this->define_admin_hooks();
-		$this->define_public_hooks();
-
 
 		$this->id                 = 'wc-my-bill-payment';
 		$this->method_title       = 'WC Pay my bill payment';
@@ -89,125 +89,23 @@ class Wc_My_Bill_Payment extends WC_Payment_Gateway {
         );
 
         
-        // $this->logger = wc_get_logger();
-        // $this->logger_context = array( 'source' => $this->id );
+        $this->logger = wc_get_logger();
+        $this->logger_context = array( 'source' => $this->id );
 
         // Get setting values
         $this->enabled         = $this->get_option( 'enabled' );
         $this->title           = $this->get_option( 'title' );
         $this->description     = $this->get_option( 'description' );
-        $this->my_bill_apiKey     = $this->get_option( 'my_bill_apiKey' );
-        // $this->log_enabled     = $this->get_option( 'log_enabled' );
+        $this->my_bill_apiKey  = $this->get_option( 'my_bill_apiKey' );
+        $this->log_enabled     = $this->get_option( 'log_enabled' );
 
 		$this->init_form_fields();
 
-	}
-
-	/**
-	 * Load the required dependencies for this plugin.
-	 *
-	 * Include the following files that make up the plugin:
-	 *
-	 * - Wc_My_Bill_Payment_Loader. Orchestrates the hooks of the plugin.
-	 * - Wc_My_Bill_Payment_i18n. Defines internationalization functionality.
-	 * - Wc_My_Bill_Payment_Admin. Defines all hooks for the admin area.
-	 * - Wc_My_Bill_Payment_Public. Defines all hooks for the public side of the site.
-	 *
-	 * Create an instance of the loader which will be used to register the hooks
-	 * with WordPress.
-	 *
-	 * @since    1.0.0
-	 * @access   private
-	 */
-	private function load_dependencies() {
-
-		/**
-		 * The class responsible for orchestrating the actions and filters of the
-		 * core plugin.
-		 */
-		require_once plugin_dir_path( dirname( __FILE__ ) ) . 'includes/class-wc-my-bill-payment-loader.php';
-
-		/**
-		 * The class responsible for defining internationalization functionality
-		 * of the plugin.
-		 */
-		require_once plugin_dir_path( dirname( __FILE__ ) ) . 'includes/class-wc-my-bill-payment-i18n.php';
-
-		/**
-		 * The class responsible for defining all actions that occur in the admin area.
-		 */
-		require_once plugin_dir_path( dirname( __FILE__ ) ) . 'admin/class-wc-my-bill-payment-admin.php';
-
-		/**
-		 * The class responsible for defining all actions that occur in the public-facing
-		 * side of the site.
-		 */
-		require_once plugin_dir_path( dirname( __FILE__ ) ) . 'public/class-wc-my-bill-payment-public.php';
-
-		$this->loader = new Wc_My_Bill_Payment_Loader();
+		add_action( 'woocommerce_update_options_payment_gateways_' . $this->id, array( $this, 'process_admin_options' ), 10, 0);
+		add_action( 'woocommerce_api_wc_my_bill_payment', array( $this, 'my_bills_callback_response' ), 10, 0);
 
 	}
-
-	/**
-	 * Define the locale for this plugin for internationalization.
-	 *
-	 * Uses the Wc_My_Bill_Payment_i18n class in order to set the domain and to register the hook
-	 * with WordPress.
-	 *
-	 * @since    1.0.0
-	 * @access   private
-	 */
-	private function set_locale() {
-
-		$plugin_i18n = new Wc_My_Bill_Payment_i18n();
-
-		$this->loader->add_action( 'plugins_loaded', $plugin_i18n, 'load_plugin_textdomain' );
-
-	}
-
-	/**
-	 * Register all of the hooks related to the admin area functionality
-	 * of the plugin.
-	 *
-	 * @since    1.0.0
-	 * @access   private
-	 */
-	private function define_admin_hooks() {
-
-		$plugin_admin = new Wc_My_Bill_Payment_Admin( $this->get_plugin_name(), $this->get_version() );
-
-		$this->loader->add_action( 'admin_enqueue_scripts', $plugin_admin, 'enqueue_styles' );
-		$this->loader->add_action( 'admin_enqueue_scripts', $plugin_admin, 'enqueue_scripts' );
-		$this->loader->add_action( 'woocommerce_update_options_payment_gateways_' . $this->id, $plugin_admin, 'process_admin_options', 10, 0 );
-
-	}
-
-	/**
-	 * Register all of the hooks related to the public-facing functionality
-	 * of the plugin.
-	 *
-	 * @since    1.0.0
-	 * @access   private
-	 */
-	private function define_public_hooks() {
-
-		$plugin_public = new Wc_My_Bill_Payment_Public( $this->get_plugin_name(), $this->get_version() );
-
-		$this->loader->add_action( 'wp_enqueue_scripts', $plugin_public, 'enqueue_styles' );
-		$this->loader->add_action( 'wp_enqueue_scripts', $plugin_public, 'enqueue_scripts' );
-		$this->loader->add_action( 'woocommerce_api_Wc_My_Bill_Payment', $plugin_public, 'my_bills_callback_response',10,0 );
-
-	}
-
-	/**
-	 * Run the loader to execute all of the hooks with WordPress.
-	 *
-	 * @since    1.0.0
-	 */
-	public function run() {
-		$this->loader->run();
-	}
-
+	
 	/**
 	 * The name of the plugin used to uniquely identify it within the context of
 	 * WordPress and to define internationalization functionality.
@@ -243,13 +141,13 @@ class Wc_My_Bill_Payment extends WC_Payment_Gateway {
         $label = __( 'Enable Logging', 'wc-my-bill-payment' );
         $description = __( 'Enable the logging of errors.', 'wc-my-bill-payment' );
         
-        // if ( defined( 'WC_LOG_DIR' ) ) {
-        //     $nmi_pay_log_url = add_query_arg( 'tab', 'logs', add_query_arg( 'page', 'wc-status', admin_url( 'admin.php' ) ) );
-        //     $nmi_pay_log_key = 'nmi_pay-' . sanitize_file_name( wp_hash( 'nmi_pay' ) ) . '-log';
-        //     $nmi_pay_log_url = add_query_arg( 'log_file', $nmi_pay_log_key, $nmi_pay_log_url );
+        if ( defined( 'WC_LOG_DIR' ) ) {
+            $nmi_pay_log_url = add_query_arg( 'tab', 'logs', add_query_arg( 'page', 'wc-status', admin_url( 'admin.php' ) ) );
+            $nmi_pay_log_key = 'nmi_pay-' . sanitize_file_name( wp_hash( 'nmi_pay' ) ) . '-log';
+            $nmi_pay_log_url = add_query_arg( 'log_file', $nmi_pay_log_key, $nmi_pay_log_url );
         
-        //     $label .= ' | ' . sprintf( __( '%1$sView Log%2$s', 'wc-my-bill-payment' ), '<a href="' . esc_url( $nmi_pay_log_url ) . '">', '</a>' );
-        // }
+            $label .= ' | ' . sprintf( __( '%1$sView Log%2$s', 'wc-my-bill-payment' ), '<a href="' . esc_url( $nmi_pay_log_url ) . '">', '</a>' );
+        }
         
 		$this->form_fields = array(
             'enabled' => array(
@@ -260,19 +158,19 @@ class Wc_My_Bill_Payment extends WC_Payment_Gateway {
                 'default'     => 'no'
             ),
 			'title' => array(
-				'title'       => __( 'title', 'wc-my-bill-payment' ),
+				'title'       => __( 'Title', 'wc-my-bill-payment' ),
 				'type'        => 'text',
 				'description' => __( 'This controls the title which the user sees during checkout within the credit card payment type.', 'wc-my-bill-payment' ),
 				'default'     => __( 'Pay with credit card', 'wc-my-bill-payment' )
 			),
 			'description' => array(
-				'title'       => __( 'description', 'wc-my-bill-payment' ),
+				'title'       => __( 'Description', 'wc-my-bill-payment' ),
 				'type'        => 'text',
 				'description' => __( 'This controls the description which the user sees during checkout within the credit card payment type.', 'wc-my-bill-payment' ),
 				'default'     => __( 'Pay with credit card.', 'wc-my-bill-payment' )
 			),
             'my_bill_apiKey' => array(
-				'title'       => __( 'My  Bills apiKey', 'wc-my-bill-payment' ),
+				'title'       => __( 'My Bills apiKey', 'wc-my-bill-payment' ),
 				'type'        => 'text',
 				'description' => __( 'This is the sandbox account Terminal-ID', 'wc-my-bill-payment' ),
 				'default'     => ''
@@ -310,19 +208,214 @@ class Wc_My_Bill_Payment extends WC_Payment_Gateway {
 	* We're processing the payments here, everything about it is in Step 5
 	*/
 	public function process_payment( $order_id ) {
-
+		
 		global $woocommerce;
 
 		$this->write_Woo_logs('process_payment');
-		
-		$nminonce =  wp_create_nonce('nmi_callback_mode');
-		update_post_meta($order_id, '_nmi_payment_page', $nminonce);//Create security calls
 
-		return array(
-			'result' => SUCCESS,
-			'redirect' => get_site_url().'/?wc-api=NmiPayGateway&event_type=proccess&order_id='.$order_id//get_site_url() sometime it might cause an issue for network path enable site
-		);
+        return array(
+			'result' => 'success',
+            'redirect' => get_site_url().'/?wc-api=Wc_My_Bill_Payment&event_type=proccess&order_id='.$order_id//get_site_url() sometime it might cause an issue for network path enable site
+        );
 
 	}
+
+		/*
+    * Callback methods
+    */
+	public function my_bills_callback_response()
+    {
+		if($_REQUEST['event_type']){
+            $event_type = $_REQUEST['event_type'];
+            
+			$order_id;
+			// $payid;
+
+            if(isset($_REQUEST['order_id'])){
+                $order_id = sanitize_text_field($_REQUEST['order_id']);
+            }
+			if(isset($_REQUEST['orderId'])){
+                $order_id = sanitize_text_field($_REQUEST['orderId']);
+            }
+			// if(isset($_REQUEST['payid'])){
+            //     $payid = sanitize_text_field($_REQUEST['payid']);
+            // }
+
+			if($event_type == 'proccess'){
+				$this->write_Woo_logs('proccess payment');
+				$this->processPayment($order_id);
+			}elseif($event_type == 'success'){
+				$this->write_Woo_logs('proccess completed');
+				$this->successPayment($order_id);
+			}else{
+
+			}
+        }
+    }
+
+	public function processPayment($order_id)
+    {
+
+        $endpoint = 'https://secure.mybills.lk/api/sch/payments';
+		$site_title = (get_bloginfo( 'name' ) != null) ? get_bloginfo( 'name' ) : ' ';
+        $site_description = (get_bloginfo( 'description' ) != null) ? get_bloginfo( 'description' ) : ' ';
+
+		// we need it to get any order detailes
+		$order = wc_get_order( $order_id );
+
+		// Get Order Totals $0.00
+		$my_bills_currency = $order->get_currency();
+		$my_bills_total = $order->get_total();
+		$woodecimaloptions = get_option('woocommerce_price_num_decimals');
+		if($woodecimaloptions == 0){
+			$my_bills_total = number_format((float)$my_bills_total, 2, '.', '');
+		}else{
+			$my_bills_total = $this->formateAmount($my_bills_total);
+		}
+
+		// Get Order User, Billing & Shipping Addresses
+		$my_bills_first_name = $order->get_billing_first_name();
+		$my_bills_last_name = $order->get_billing_last_name();
+		$my_bills_email = $order->get_billing_email();
+		$my_bills_phone = $order->get_billing_phone();
+			
+		// /*
+		// * Array with parameters for API interaction
+		// */
+		$body = [
+			'amount'  => $my_bills_total,
+			'classOrCourse' => $site_title,//Need to verify this value
+			'studentName' => $my_bills_first_name.' '.$my_bills_last_name,
+			'email' => $my_bills_email,
+			'description' => $site_description,
+			'phoneNo' => $my_bills_phone,
+			'indexNumber' => $order_id,
+			'apiKey' => $this->my_bill_apiKey
+		];
+			
+		$body = wp_json_encode( $body );
+		
+		$this->write_Woo_logs('json body');
+		$this->write_Woo_logs($body);
+		
+		$args = array(
+			'body'        => $body,
+			'headers'     => [
+					'Content-Type' => 'application/json',
+				],
+				'timeout'     => 60,
+				'redirection' => 5,
+				'blocking'    => true,
+				'httpversion' => '1.0',
+				'sslverify'   => false,
+				'data_format' => 'body'
+			);
+
+		/*
+		* Your API interaction could be built with wp_remote_post()
+		*/
+		$response = wp_remote_post( $endpoint, $args );
+		
+		$this->write_Woo_logs('Response');
+		$this->write_Woo_logs($response);
+		// wp_die();
+	
+		if( !is_wp_error( $response ) ) {
+	
+			$body = json_decode( $response['body'], true );
+
+			$this->write_Woo_logs('body');
+			$this->write_Woo_logs($body);
+	
+			// it could be different depending on your payment processor
+			if ($response['response']['code'] == '201' ) {
+
+				update_post_meta($order_id, '_mybills_payment_id', $body['id']);//Create security calls
+
+				$url = 'https://secure.mybills.lk/pay/'.$body['id'];
+
+				$this->write_Woo_logs('End_process_payment');
+				$this->write_Woo_logs('Start redirecting to '.$url);
+				$this->write_Woo_logs($url);
+				// Payment created and redirecting payment page
+				wp_redirect($url);
+				exit;
+	
+			} else {
+				$this->write_Woo_logs('payment creation error');
+				wc_add_notice(  'Please try again.', 'error' );
+				return;
+			}
+	
+		} else {
+			$this->write_Woo_logs('payment response error');
+			wc_add_notice(  'Connection error.', 'error' );
+			return;
+		}
+    } 
+
+	public function successPayment($order_id)
+    {
+		if(isset($order_id)){
+			$order = new WC_Order($order_id);
+			// $payid = get_post_meta($order_id, '_mybills_payment_id');
+			// update_post_meta($order_id, '_mybills_payment_id', $body['id']);//Create security calls
+
+			// if(isset($_POST['reference_no'])){
+			// 	$order->set_transaction_id($_POST['reference_no']);
+			// }
+
+			$order->payment_complete();
+			$order->add_order_note( __( 'Order payment received', MOREFLO_CHECKOUT ) );//New translation
+			$this-write_Woo_logs('Payment completed');//Logs
+
+			WC()->cart->empty_cart();
+			$thankyouURL = $order->get_checkout_order_received_url();
+			wp_safe_redirect($thankyouURL);
+
+			$returnResult['success'] = true;
+			$returnResult['successCode'] = "200";
+	
+			wp_send_json( $returnResult, $returnResult['successCode'] );//Send received notification to server
+
+		}else{
+			$this->write_Woo_logs('Return object');//Logs
+			$this->write_Woo_logs($_POST);//Logs
+			$this->write_Woo_logs($_REQUEST);//Logs
+		}
+ 
+    }
+
+	public function formateAmount($amount)
+    {
+        // Adding decimal point zeros if required based on woocommerece settings
+        $woodecimaloptions = get_option('woocommerce_price_num_decimals');
+
+        $nmiamountformats = [0 => '00', 1 => '0'];
+        foreach ($nmiamountformats as $key => $value) {
+            if($key == $woodecimaloptions)
+            {
+                $amount = $amount.$value;
+            }
+        }
+        if($woodecimaloptions > 0)
+        {
+            if($woodecimaloptions >= 3)
+            {
+                $amount = substr($amount, 0, -($woodecimaloptions - 2) );
+            }
+        }
+
+        return $amount;
+    }
+
+	public function write_Woo_logs($details)
+    {
+        if ( $this->log_enabled == 'yes' ) {//record if only log enable this method to run 
+            $this->logger->debug(wc_print_r("************", true), $this->logger_context);
+            $this->logger->debug(wc_print_r($details, true), $this->logger_context);
+            $this->logger->debug(wc_print_r("************", true), $this->logger_context);
+        }
+    }
 
 }

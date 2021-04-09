@@ -67,11 +67,6 @@ register_deactivation_hook( __FILE__, 'deactivate_wc_my_bill_payment' );
 add_filter( 'woocommerce_payment_gateways', 'add_wc_my_bill_payment_gateway_class' );
 add_action( 'plugins_loaded', 'load_wc_my_bill_payment_gateway_class', 0 );
 
-/**
- * The core plugin class that is used to define internationalization,
- * admin-specific hooks, and public-facing site hooks.
- */
-require plugin_dir_path( __FILE__ ) . 'includes/class-wc-my-bill-payment.php';
 
 /**
  * Begins execution of the plugin.
@@ -83,10 +78,12 @@ require plugin_dir_path( __FILE__ ) . 'includes/class-wc-my-bill-payment.php';
  * @since    1.0.0
  */
 function load_wc_my_bill_payment_gateway_class() {
-// function run_wc_my_bill_payment() {
+	/**
+	 * The core plugin class that is used to define internationalization,
+	 * admin-specific hooks, and public-facing site hooks.
+	 */
+	require plugin_dir_path( __FILE__ ) . 'includes/class-wc-my-bill-payment.php';
 
 	$plugin = new Wc_My_Bill_Payment();
-	$plugin->run();
 
 }
-//run_wc_my_bill_payment();
