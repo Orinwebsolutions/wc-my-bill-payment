@@ -246,7 +246,7 @@ class Wc_My_Bill_Payment extends WC_Payment_Gateway {
 				$this->processPayment($order_id);
 			}elseif($event_type == 'success'){
 				$this->write_Woo_logs('proccess completed');
-				$this->successPayment($order_id);
+				$this->successPayment();
 			}else{
 
 			}
@@ -262,6 +262,14 @@ class Wc_My_Bill_Payment extends WC_Payment_Gateway {
 
 		// we need it to get any order detailes
 		$order = wc_get_order( $order_id );
+
+		if (isset(WC()->session)) {
+			WC()->session->set('mybill-order-id', $order_id);
+        }
+
+		foreach ( $order->get_items() as $item ) {
+			$product[] = $item->get_name();
+		}
 
 		// Get Order Totals $0.00
 		$my_bills_currency = $order->get_currency();
@@ -287,10 +295,11 @@ class Wc_My_Bill_Payment extends WC_Payment_Gateway {
 			'classOrCourse' => $site_title,//Need to verify this value
 			'studentName' => $my_bills_first_name.' '.$my_bills_last_name,
 			'email' => $my_bills_email,
-			'description' => $site_description,
+			'description' => implode(", ",$product),
 			'phoneNo' => $my_bills_phone,
 			'indexNumber' => $order_id,
-			'apiKey' => $this->my_bill_apiKey
+			'apiKey' => $this->my_bill_apiKey,
+			'invoice' => "IN".$order_id
 		];
 			
 		$body = wp_json_encode( $body );
@@ -354,37 +363,45 @@ class Wc_My_Bill_Payment extends WC_Payment_Gateway {
 		}
     } 
 
-	public function successPayment($order_id)
+	public function successPayment()
     {
+		$order_id;
+		if (isset(WC()->session)) {
+			$order_id = WC()->session->get('mybill-order-id');
+        }
+
 		if(isset($order_id)){
 			$order = new WC_Order($order_id);
-			// $payid = get_post_meta($order_id, '_mybills_payment_id');
-			// update_post_meta($order_id, '_mybills_payment_id', $body['id']);//Create security calls
 
-			// if(isset($_POST['reference_no'])){
-			// 	$order->set_transaction_id($_POST['reference_no']);
-			// }
+			$pay_id = get_post_meta( $order_id, '_mybills_payment_id', true);
 
-			$order->payment_complete();
-			$order->add_order_note( __( 'Order payment received', MOREFLO_CHECKOUT ) );//New translation
-			$this-write_Woo_logs('Payment completed');//Logs
+			$receptURL = "https://secure.mybills.lk/receipt/".$pay_id;
+			$response = wp_remote_get( $receptURL );
+			$responseBody = wp_remote_retrieve_body( $response );
+			$result = json_decode( $responseBody );
 
-			WC()->cart->empty_cart();
-			$thankyouURL = $order->get_checkout_order_received_url();
-			// wp_safe_redirect($thankyouURL);
-			wp_redirect($thankyouURL);
-			exit;
+			Wc_My_Bill_Payment::write_Woo_logs($result);//Logs
 
-			$returnResult['success'] = true;
-			$returnResult['successCode'] = "200";
-	
-			wp_send_json( $returnResult, $returnResult['successCode'] );//Send received notification to server
 
+			if($pay_id == $result->id && $result->status == 'success' ){
+
+				$order->payment_complete();
+				$order->add_order_note('Order payment received');//New translation
+				Wc_My_Bill_Payment::write_Woo_logs('Payment completed');//Logs
+
+				WC()->cart->empty_cart();
+				$thankyouURL = $order->get_checkout_order_received_url();
+				wp_redirect($thankyouURL);
+				exit;
+			}else{
+				//Add message and redirect to checkout
+				wc_add_notice('Payment status is '.$result->status.'. Please contact bank for information', 'error' );
+				wp_redirect(wc_get_checkout_url());
+				exit;
+			}
 		}else{
-			$this->write_Woo_logs('Return object');//Logs
-			$this->write_Woo_logs($_POST);//Logs
-			$this->write_Woo_logs($_REQUEST);//Logs
-			// wp_safe_redirect(wc_get_checkout_url());
+			Wc_My_Bill_Payment::write_Woo_logs('Return object');//Logs
+			wc_add_notice( 'Payment failed. Please contact bank for information', 'error' );
 			wp_redirect(wc_get_checkout_url());
 			exit;
 		}
